@@ -17,7 +17,9 @@ import io.dapr.config.Properties;
 import io.dapr.durabletask.DurableTaskClient;
 import io.dapr.durabletask.DurableTaskGrpcClientBuilder;
 import io.dapr.durabletask.NewOrchestrationInstanceOptions;
+import io.dapr.durabletask.NewOrchestrationInstanceResult;
 import io.dapr.durabletask.OrchestrationMetadata;
+import io.dapr.durabletask.OrchestrationOperationResult;
 import io.dapr.durabletask.PurgeResult;
 import io.dapr.durabletask.implementation.protobuf.HistoryEvents.HistoryEvent;
 import io.dapr.durabletask.implementation.protobuf.OrchestratorService;
@@ -220,6 +222,45 @@ public class DaprWorkflowClient implements AutoCloseable {
   }
 
   /**
+   * Schedules a new workflow like {@link #scheduleNewWorkflow(Class, NewWorkflowOptions)}, and also reports whether
+   * the sidecar staged the start.
+   *
+   * <p>A Dapr sidecar with no workflow worker connected can accept the start, save it, and run it once a worker
+   * connects. Sidecars that do not stage operations always report false.
+   *
+   * @param <T>     any Workflow type
+   * @param clazz   Class extending Workflow to start an instance of.
+   * @param options the options for the new workflow, including input, instance ID, etc.
+   * @return the instance ID of the new workflow, and whether the sidecar staged the start.
+   * @throws WorkflowInstanceAlreadyExistsException if an active workflow with the requested instance ID
+   *                                                already exists.
+   */
+  public <T extends Workflow> NewWorkflowResult scheduleNewWorkflowWithResult(Class<T> clazz,
+                                                                              NewWorkflowOptions options) {
+    return this.scheduleNewWorkflowWithResult(clazz.getCanonicalName(), options);
+  }
+
+  /**
+   * Schedules a new workflow like {@link #scheduleNewWorkflow(String, NewWorkflowOptions)}, and also reports whether
+   * the sidecar staged the start.
+   *
+   * <p>A Dapr sidecar with no workflow worker connected can accept the start, save it, and run it once a worker
+   * connects. Sidecars that do not stage operations always report false.
+   *
+   * @param name    name of the workflow to schedule
+   * @param options the options for the new workflow, including input, instance ID, etc.
+   * @return the instance ID of the new workflow, and whether the sidecar staged the start.
+   * @throws WorkflowInstanceAlreadyExistsException if an active workflow with the requested instance ID
+   *                                                already exists.
+   */
+  public NewWorkflowResult scheduleNewWorkflowWithResult(String name, NewWorkflowOptions options) {
+    NewOrchestrationInstanceOptions orchestrationInstanceOptions = fromNewWorkflowOptions(options);
+    NewOrchestrationInstanceResult result = mapAlreadyExists(options.getInstanceId(),
+        () -> this.innerClient.scheduleNewOrchestrationInstanceWithResult(name, orchestrationInstanceOptions));
+    return new NewWorkflowResult(result.getInstanceId(), result.isStaged());
+  }
+
+  /**
    * Suspend the workflow associated with the provided instance id.
    *
    * @param workflowInstanceId Workflow instance id to suspend.
@@ -244,6 +285,38 @@ public class DaprWorkflowClient implements AutoCloseable {
    */
   public void suspendWorkflow(String workflowInstanceId, @Nullable String reason, @Nullable String appId) {
     this.innerClient.suspendInstance(workflowInstanceId, reason, appId);
+  }
+
+  /**
+   * Suspends a workflow like {@link #suspendWorkflow(String, String)}, and also reports whether the sidecar staged
+   * the suspension.
+   *
+   * <p>A Dapr sidecar with no workflow worker connected can accept the suspension, save it, and run it once a worker
+   * connects. Sidecars that do not stage operations always report false.
+   *
+   * @param workflowInstanceId Workflow instance id to suspend.
+   * @param reason             reason for suspending the workflow instance.
+   * @return whether the sidecar staged the suspension.
+   */
+  public WorkflowOperationResult suspendWorkflowWithResult(String workflowInstanceId, @Nullable String reason) {
+    return this.suspendWorkflowWithResult(workflowInstanceId, reason, null);
+  }
+
+  /**
+   * Suspends a workflow like {@link #suspendWorkflow(String, String, String)}, and also reports whether the sidecar
+   * staged the suspension.
+   *
+   * <p>A Dapr sidecar with no workflow worker connected can accept the suspension, save it, and run it once a worker
+   * connects. Sidecars that do not stage operations always report false.
+   *
+   * @param workflowInstanceId Workflow instance id to suspend.
+   * @param reason             reason for suspending the workflow instance.
+   * @param appId              ID of the app that owns the workflow instance. May be null to target the local app.
+   * @return whether the sidecar staged the suspension.
+   */
+  public WorkflowOperationResult suspendWorkflowWithResult(String workflowInstanceId, @Nullable String reason,
+                                                           @Nullable String appId) {
+    return toWorkflowOperationResult(this.innerClient.suspendInstanceWithResult(workflowInstanceId, reason, appId));
   }
 
   /**
@@ -274,6 +347,38 @@ public class DaprWorkflowClient implements AutoCloseable {
   }
 
   /**
+   * Resumes a workflow like {@link #resumeWorkflow(String, String)}, and also reports whether the sidecar staged
+   * the resumption.
+   *
+   * <p>A Dapr sidecar with no workflow worker connected can accept the resumption, save it, and run it once a worker
+   * connects. Sidecars that do not stage operations always report false.
+   *
+   * @param workflowInstanceId Workflow instance id to resume.
+   * @param reason             reason for resuming the workflow instance.
+   * @return whether the sidecar staged the resumption.
+   */
+  public WorkflowOperationResult resumeWorkflowWithResult(String workflowInstanceId, @Nullable String reason) {
+    return this.resumeWorkflowWithResult(workflowInstanceId, reason, null);
+  }
+
+  /**
+   * Resumes a workflow like {@link #resumeWorkflow(String, String, String)}, and also reports whether the sidecar
+   * staged the resumption.
+   *
+   * <p>A Dapr sidecar with no workflow worker connected can accept the resumption, save it, and run it once a worker
+   * connects. Sidecars that do not stage operations always report false.
+   *
+   * @param workflowInstanceId Workflow instance id to resume.
+   * @param reason             reason for resuming the workflow instance.
+   * @param appId              ID of the app that owns the workflow instance. May be null to target the local app.
+   * @return whether the sidecar staged the resumption.
+   */
+  public WorkflowOperationResult resumeWorkflowWithResult(String workflowInstanceId, @Nullable String reason,
+                                                          @Nullable String appId) {
+    return toWorkflowOperationResult(this.innerClient.resumeInstanceWithResult(workflowInstanceId, reason, appId));
+  }
+
+  /**
    * Terminates the workflow associated with the provided instance id.
    *
    * @param workflowInstanceId Workflow instance id to terminate.
@@ -298,6 +403,38 @@ public class DaprWorkflowClient implements AutoCloseable {
    */
   public void terminateWorkflow(String workflowInstanceId, @Nullable Object output, @Nullable String appId) {
     this.innerClient.terminate(workflowInstanceId, output, appId);
+  }
+
+  /**
+   * Terminates a workflow like {@link #terminateWorkflow(String, Object)}, and also reports whether the sidecar
+   * staged the termination.
+   *
+   * <p>A Dapr sidecar with no workflow worker connected can accept the termination, save it, and run it once a
+   * worker connects. Sidecars that do not stage operations always report false.
+   *
+   * @param workflowInstanceId Workflow instance id to terminate.
+   * @param output             the optional output to set for the terminated orchestration instance.
+   * @return whether the sidecar staged the termination.
+   */
+  public WorkflowOperationResult terminateWorkflowWithResult(String workflowInstanceId, @Nullable Object output) {
+    return this.terminateWorkflowWithResult(workflowInstanceId, output, null);
+  }
+
+  /**
+   * Terminates a workflow like {@link #terminateWorkflow(String, Object, String)}, and also reports whether the
+   * sidecar staged the termination.
+   *
+   * <p>A Dapr sidecar with no workflow worker connected can accept the termination, save it, and run it once a
+   * worker connects. Sidecars that do not stage operations always report false.
+   *
+   * @param workflowInstanceId Workflow instance id to terminate.
+   * @param output             the optional output to set for the terminated orchestration instance.
+   * @param appId              ID of the app that owns the workflow instance. May be null to target the local app.
+   * @return whether the sidecar staged the termination.
+   */
+  public WorkflowOperationResult terminateWorkflowWithResult(String workflowInstanceId, @Nullable Object output,
+                                                             @Nullable String appId) {
+    return toWorkflowOperationResult(this.innerClient.terminateWithResult(workflowInstanceId, output, appId));
   }
 
   /**
@@ -555,6 +692,42 @@ public class DaprWorkflowClient implements AutoCloseable {
   }
 
   /**
+   * Sends an event like {@link #raiseEvent(String, String, Object)}, and also reports whether the sidecar staged
+   * the event.
+   *
+   * <p>A Dapr sidecar with no workflow worker connected can accept the event, save it, and deliver it once a worker
+   * connects. Sidecars that do not stage operations always report false.
+   *
+   * @param workflowInstanceId The ID of the workflow instance that will handle the event.
+   * @param eventName          The name of the event. Event names are case-insensitive.
+   * @param eventPayload       The serializable data payload to include with the event.
+   * @return whether the sidecar staged the event.
+   */
+  public WorkflowOperationResult raiseEventWithResult(String workflowInstanceId, String eventName,
+                                                      Object eventPayload) {
+    return this.raiseEventWithResult(workflowInstanceId, eventName, eventPayload, null);
+  }
+
+  /**
+   * Sends an event like {@link #raiseEvent(String, String, Object, String)}, and also reports whether the sidecar
+   * staged the event.
+   *
+   * <p>A Dapr sidecar with no workflow worker connected can accept the event, save it, and deliver it once a worker
+   * connects. Sidecars that do not stage operations always report false.
+   *
+   * @param workflowInstanceId The ID of the workflow instance that will handle the event.
+   * @param eventName          The name of the event. Event names are case-insensitive.
+   * @param eventPayload       The serializable data payload to include with the event.
+   * @param appId              ID of the app that owns the workflow instance. May be null to target the local app.
+   * @return whether the sidecar staged the event.
+   */
+  public WorkflowOperationResult raiseEventWithResult(String workflowInstanceId, String eventName,
+                                                      Object eventPayload, @Nullable String appId) {
+    return toWorkflowOperationResult(
+        this.innerClient.raiseEventWithResult(workflowInstanceId, eventName, eventPayload, appId));
+  }
+
+  /**
    * Purges workflow instance state from the workflow state store.
    *
    * @param workflowInstanceId The unique ID of the workflow instance to purge.
@@ -636,20 +809,52 @@ public class DaprWorkflowClient implements AutoCloseable {
    */
   public String rerunWorkflowFromEvent(String sourceInstanceId, int eventId,
       @Nullable RerunWorkflowFromEventOptions options) {
+    validateRerun(sourceInstanceId, eventId, options);
+    if (options == null) {
+      return this.innerClient.rerunWorkflowFromEvent(sourceInstanceId, eventId, null, null, false);
+    }
+    return this.innerClient.rerunWorkflowFromEvent(sourceInstanceId, eventId,
+        options.getNewInstanceId(), options.getInput(), options.isOverwriteInput());
+  }
+
+  /**
+   * Reruns a workflow like {@link #rerunWorkflowFromEvent(String, int, RerunWorkflowFromEventOptions)}, and also
+   * reports whether the sidecar staged the rerun.
+   *
+   * <p>A Dapr sidecar with no workflow worker connected can accept the rerun, save it, and run it once a worker
+   * connects. Sidecars that do not stage operations always report false.
+   *
+   * @param sourceInstanceId the ID of the source workflow instance to rerun from
+   * @param eventId          the history event ID to rerun from; must not be negative
+   * @param options          optional rerun configuration; may be null
+   * @return the instance ID of the new workflow instance, and whether the sidecar staged the rerun
+   * @throws IllegalArgumentException if sourceInstanceId is null or empty, if eventId is negative,
+   *                                  or if input is set on options without overwriteInput being true
+   */
+  public NewWorkflowResult rerunWorkflowFromEventWithResult(String sourceInstanceId, int eventId,
+      @Nullable RerunWorkflowFromEventOptions options) {
+    validateRerun(sourceInstanceId, eventId, options);
+    NewOrchestrationInstanceResult result;
+    if (options == null) {
+      result = this.innerClient.rerunWorkflowFromEventWithResult(sourceInstanceId, eventId, null, null, false);
+    } else {
+      result = this.innerClient.rerunWorkflowFromEventWithResult(sourceInstanceId, eventId,
+          options.getNewInstanceId(), options.getInput(), options.isOverwriteInput());
+    }
+    return new NewWorkflowResult(result.getInstanceId(), result.isStaged());
+  }
+
+  private static void validateRerun(String sourceInstanceId, int eventId,
+      @Nullable RerunWorkflowFromEventOptions options) {
     if (sourceInstanceId == null || sourceInstanceId.isEmpty()) {
       throw new IllegalArgumentException("sourceInstanceId must not be null or empty.");
     }
     if (eventId < 0) {
       throw new IllegalArgumentException("eventId must not be negative.");
     }
-    if (options == null) {
-      return this.innerClient.rerunWorkflowFromEvent(sourceInstanceId, eventId, null, null, false);
-    }
-    if (options.getInput() != null && !options.isOverwriteInput()) {
+    if (options != null && options.getInput() != null && !options.isOverwriteInput()) {
       throw new IllegalArgumentException("overwriteInput must be true when input is set.");
     }
-    return this.innerClient.rerunWorkflowFromEvent(sourceInstanceId, eventId,
-        options.getNewInstanceId(), options.getInput(), options.isOverwriteInput());
   }
 
   /**
@@ -744,7 +949,7 @@ public class DaprWorkflowClient implements AutoCloseable {
    * Runs the given scheduling call, translating the sidecar's rejection of a duplicate active
    * instance ID into a {@link WorkflowInstanceAlreadyExistsException}.
    */
-  private static String mapAlreadyExists(@Nullable String instanceId, Supplier<String> schedule) {
+  private static <R> R mapAlreadyExists(@Nullable String instanceId, Supplier<R> schedule) {
     try {
       return schedule.get();
     } catch (StatusRuntimeException e) {
@@ -753,6 +958,10 @@ public class DaprWorkflowClient implements AutoCloseable {
       }
       throw e;
     }
+  }
+
+  private static WorkflowOperationResult toWorkflowOperationResult(OrchestrationOperationResult result) {
+    return new WorkflowOperationResult(result.isStaged());
   }
 
   private static boolean isAlreadyExists(StatusRuntimeException e) {

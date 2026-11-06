@@ -174,6 +174,13 @@ public final class DurableTaskGrpcClient extends DurableTaskClient {
   public String scheduleNewOrchestrationInstance(
       String orchestratorName,
       NewOrchestrationInstanceOptions options) {
+    return this.scheduleNewOrchestrationInstanceWithResult(orchestratorName, options).getInstanceId();
+  }
+
+  @Override
+  public NewOrchestrationInstanceResult scheduleNewOrchestrationInstanceWithResult(
+      String orchestratorName,
+      NewOrchestrationInstanceOptions options) {
     if (orchestratorName == null || orchestratorName.length() == 0) {
       throw new IllegalArgumentException("A non-empty orchestrator name must be specified.");
     }
@@ -247,7 +254,7 @@ public final class DurableTaskGrpcClient extends DurableTaskClient {
       }
     }
 
-    return response.get().getInstanceId();
+    return new NewOrchestrationInstanceResult(response.get().getInstanceId(), response.get().getStaged());
   }
 
   /**
@@ -301,6 +308,12 @@ public final class DurableTaskGrpcClient extends DurableTaskClient {
 
   @Override
   public void raiseEvent(String instanceId, String eventName, Object eventPayload, @Nullable String appID) {
+    this.raiseEventWithResult(instanceId, eventName, eventPayload, appID);
+  }
+
+  @Override
+  public OrchestrationOperationResult raiseEventWithResult(String instanceId, String eventName,
+                                                           @Nullable Object eventPayload, @Nullable String appID) {
     Helpers.throwIfArgumentNull(instanceId, "instanceId");
     Helpers.throwIfArgumentNull(eventName, "eventName");
 
@@ -317,8 +330,8 @@ public final class DurableTaskGrpcClient extends DurableTaskClient {
     }
 
     OrchestratorService.RaiseEventRequest request = builder.build();
-    this.sidecarClient.raiseEvent(request);
-
+    OrchestratorService.RaiseEventResponse response = this.sidecarClient.raiseEvent(request);
+    return new OrchestrationOperationResult(response.getStaged());
   }
 
   @Override
@@ -424,6 +437,12 @@ public final class DurableTaskGrpcClient extends DurableTaskClient {
 
   @Override
   public void terminate(String instanceId, @Nullable Object output, @Nullable String appID) {
+    this.terminateWithResult(instanceId, output, appID);
+  }
+
+  @Override
+  public OrchestrationOperationResult terminateWithResult(String instanceId, @Nullable Object output,
+                                                          @Nullable String appID) {
     Helpers.throwIfArgumentNull(instanceId, "instanceId");
     String serializeOutput = this.dataConverter.serialize(output);
     this.logger.fine(() -> String.format(
@@ -438,7 +457,8 @@ public final class DurableTaskGrpcClient extends DurableTaskClient {
     if (hasAppID(appID)) {
       builder.setRouter(buildTaskRouter(appID));
     }
-    this.sidecarClient.terminateInstance(builder.build());
+    OrchestratorService.TerminateResponse response = this.sidecarClient.terminateInstance(builder.build());
+    return new OrchestrationOperationResult(response.getStaged());
   }
 
   @Override
@@ -498,6 +518,12 @@ public final class DurableTaskGrpcClient extends DurableTaskClient {
 
   @Override
   public void suspendInstance(String instanceId, @Nullable String reason, @Nullable String appID) {
+    this.suspendInstanceWithResult(instanceId, reason, appID);
+  }
+
+  @Override
+  public OrchestrationOperationResult suspendInstanceWithResult(String instanceId, @Nullable String reason,
+                                                                @Nullable String appID) {
     OrchestratorService.SuspendRequest.Builder suspendRequestBuilder = OrchestratorService.SuspendRequest.newBuilder();
     suspendRequestBuilder.setInstanceId(instanceId);
     if (reason != null) {
@@ -506,7 +532,8 @@ public final class DurableTaskGrpcClient extends DurableTaskClient {
     if (hasAppID(appID)) {
       suspendRequestBuilder.setRouter(buildTaskRouter(appID));
     }
-    this.sidecarClient.suspendInstance(suspendRequestBuilder.build());
+    OrchestratorService.SuspendResponse response = this.sidecarClient.suspendInstance(suspendRequestBuilder.build());
+    return new OrchestrationOperationResult(response.getStaged());
   }
 
   @Override
@@ -516,6 +543,12 @@ public final class DurableTaskGrpcClient extends DurableTaskClient {
 
   @Override
   public void resumeInstance(String instanceId, @Nullable String reason, @Nullable String appID) {
+    this.resumeInstanceWithResult(instanceId, reason, appID);
+  }
+
+  @Override
+  public OrchestrationOperationResult resumeInstanceWithResult(String instanceId, @Nullable String reason,
+                                                               @Nullable String appID) {
     OrchestratorService.ResumeRequest.Builder resumeRequestBuilder = OrchestratorService.ResumeRequest.newBuilder();
     resumeRequestBuilder.setInstanceId(instanceId);
     if (reason != null) {
@@ -524,7 +557,8 @@ public final class DurableTaskGrpcClient extends DurableTaskClient {
     if (hasAppID(appID)) {
       resumeRequestBuilder.setRouter(buildTaskRouter(appID));
     }
-    this.sidecarClient.resumeInstance(resumeRequestBuilder.build());
+    OrchestratorService.ResumeResponse response = this.sidecarClient.resumeInstance(resumeRequestBuilder.build());
+    return new OrchestrationOperationResult(response.getStaged());
   }
 
   @Override
@@ -584,6 +618,13 @@ public final class DurableTaskGrpcClient extends DurableTaskClient {
   @Override
   public String rerunWorkflowFromEvent(String sourceInstanceId, int eventId,
       @Nullable String newInstanceId, @Nullable Object input, boolean overwriteInput) {
+    return this.rerunWorkflowFromEventWithResult(sourceInstanceId, eventId, newInstanceId, input, overwriteInput)
+        .getInstanceId();
+  }
+
+  @Override
+  public NewOrchestrationInstanceResult rerunWorkflowFromEventWithResult(String sourceInstanceId, int eventId,
+      @Nullable String newInstanceId, @Nullable Object input, boolean overwriteInput) {
     Helpers.throwIfArgumentNull(sourceInstanceId, "sourceInstanceId");
     OrchestratorService.RerunWorkflowFromEventRequest.Builder builder =
         OrchestratorService.RerunWorkflowFromEventRequest.newBuilder()
@@ -601,7 +642,7 @@ public final class DurableTaskGrpcClient extends DurableTaskClient {
     }
     OrchestratorService.RerunWorkflowFromEventResponse response =
         this.sidecarClient.rerunWorkflowFromEvent(builder.build());
-    return response.getNewInstanceID();
+    return new NewOrchestrationInstanceResult(response.getNewInstanceID(), response.getStaged());
   }
 
   private PurgeResult toPurgeResult(OrchestratorService.PurgeInstancesResponse response) {

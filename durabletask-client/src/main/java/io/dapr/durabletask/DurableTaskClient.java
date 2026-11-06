@@ -97,6 +97,23 @@ public abstract class DurableTaskClient implements AutoCloseable {
       NewOrchestrationInstanceOptions options);
 
   /**
+   * Schedules a new orchestration instance like {@link #scheduleNewOrchestrationInstance(String,
+   * NewOrchestrationInstanceOptions)}, and also reports whether the sidecar staged the start.
+   *
+   * <p>A sidecar with no workflow worker connected can accept the start, save it, and run it once a worker connects.
+   * The default implementation never reports a staged start.</p>
+   *
+   * @param orchestratorName the name of the orchestrator to schedule
+   * @param options          the options for the new orchestration instance, including input, instance ID, etc.
+   * @return the ID of the scheduled orchestration instance, and whether the sidecar staged the start
+   */
+  public NewOrchestrationInstanceResult scheduleNewOrchestrationInstanceWithResult(
+      String orchestratorName,
+      NewOrchestrationInstanceOptions options) {
+    return new NewOrchestrationInstanceResult(this.scheduleNewOrchestrationInstance(orchestratorName, options), false);
+  }
+
+  /**
    * Sends an event notification message to a waiting orchestration instance.
    *
    * <p>In order to handle the event, the target orchestration instance must be waiting for an event named
@@ -154,6 +171,29 @@ public abstract class DurableTaskClient implements AutoCloseable {
       @Nullable String appID) {
     requireLocalRouting(appID);
     this.raiseEvent(instanceId, eventName, eventPayload);
+  }
+
+  /**
+   * Sends an event like {@link #raiseEvent(String, String, Object, String)}, and also reports whether the sidecar
+   * staged the event.
+   *
+   * <p>A sidecar with no workflow worker connected can accept the event, save it, and deliver it once a worker
+   * connects. The default implementation never reports a staged event.</p>
+   *
+   * @param instanceId   the ID of the orchestration instance that will handle the event
+   * @param eventName    the case-insensitive name of the event
+   * @param eventPayload the serializable data payload to include with the event
+   * @param appID        the ID of the app that owns the target orchestration instance, used for cross-app
+   *                     routing. May be null to target the local app.
+   * @return whether the sidecar staged the event
+   */
+  public OrchestrationOperationResult raiseEventWithResult(
+      String instanceId,
+      String eventName,
+      @Nullable Object eventPayload,
+      @Nullable String appID) {
+    this.raiseEvent(instanceId, eventName, eventPayload, appID);
+    return new OrchestrationOperationResult(false);
   }
 
   /**
@@ -361,6 +401,28 @@ public abstract class DurableTaskClient implements AutoCloseable {
   }
 
   /**
+   * Terminates an orchestration instance like {@link #terminate(String, Object, String)}, and also reports whether
+   * the sidecar staged the termination.
+   *
+   * <p>A sidecar with no workflow worker connected can accept the termination, save it, and run it once a worker
+   * connects. The default implementation never reports a staged termination.</p>
+   *
+   * @param instanceId the unique ID of the orchestration instance to terminate
+   * @param output     the optional output to set for the terminated orchestration instance.
+   *                   This value must be serializable.
+   * @param appID      the ID of the app that owns the target orchestration instance, used for cross-app
+   *                   routing. May be null to target the local app.
+   * @return whether the sidecar staged the termination
+   */
+  public OrchestrationOperationResult terminateWithResult(
+      String instanceId,
+      @Nullable Object output,
+      @Nullable String appID) {
+    this.terminate(instanceId, output, appID);
+    return new OrchestrationOperationResult(false);
+  }
+
+  /**
    * Purges orchestration instance metadata from the durable store.
    *
    * <p>This method can be used to permanently delete orchestration metadata from the underlying storage provider,
@@ -483,6 +545,27 @@ public abstract class DurableTaskClient implements AutoCloseable {
   }
 
   /**
+   * Resumes an orchestration instance like {@link #resumeInstance(String, String, String)}, and also reports whether
+   * the sidecar staged the resumption.
+   *
+   * <p>A sidecar with no workflow worker connected can accept the resumption, save it, and run it once a worker
+   * connects. The default implementation never reports a staged resumption.</p>
+   *
+   * @param instanceId the ID of the orchestration instance to resume
+   * @param reason     the reason for resuming the orchestration instance
+   * @param appID      the ID of the app that owns the target orchestration instance, used for cross-app
+   *                   routing. May be null to target the local app.
+   * @return whether the sidecar staged the resumption
+   */
+  public OrchestrationOperationResult resumeInstanceWithResult(
+      String instanceId,
+      @Nullable String reason,
+      @Nullable String appID) {
+    this.resumeInstance(instanceId, reason, appID);
+    return new OrchestrationOperationResult(false);
+  }
+
+  /**
    * Suspends a running orchestration instance.
    *
    * @param instanceId the ID of the orchestration instance to suspend
@@ -516,6 +599,27 @@ public abstract class DurableTaskClient implements AutoCloseable {
   }
 
   /**
+   * Suspends an orchestration instance like {@link #suspendInstance(String, String, String)}, and also reports
+   * whether the sidecar staged the suspension.
+   *
+   * <p>A sidecar with no workflow worker connected can accept the suspension, save it, and run it once a worker
+   * connects. The default implementation never reports a staged suspension.</p>
+   *
+   * @param instanceId the ID of the orchestration instance to suspend
+   * @param reason     the reason for suspending the orchestration instance
+   * @param appID      the ID of the app that owns the target orchestration instance, used for cross-app
+   *                   routing. May be null to target the local app.
+   * @return whether the sidecar staged the suspension
+   */
+  public OrchestrationOperationResult suspendInstanceWithResult(
+      String instanceId,
+      @Nullable String reason,
+      @Nullable String appID) {
+    this.suspendInstance(instanceId, reason, appID);
+    return new OrchestrationOperationResult(false);
+  }
+
+  /**
    * Lists workflow instance IDs with optional pagination.
    *
    * @param continuationToken the continuation token from a previous call, or null for the first page
@@ -545,6 +649,26 @@ public abstract class DurableTaskClient implements AutoCloseable {
    */
   public abstract String rerunWorkflowFromEvent(String sourceInstanceId, int eventId,
       @Nullable String newInstanceId, @Nullable Object input, boolean overwriteInput);
+
+  /**
+   * Reruns a workflow like {@link #rerunWorkflowFromEvent(String, int, String, Object, boolean)}, and also reports
+   * whether the sidecar staged the rerun.
+   *
+   * <p>A sidecar with no workflow worker connected can accept the rerun, save it, and run it once a worker connects.
+   * The default implementation never reports a staged rerun.</p>
+   *
+   * @param sourceInstanceId the ID of the source workflow instance to rerun from
+   * @param eventId          the history event ID to rerun from
+   * @param newInstanceId    the instance ID to use for the new instance, or null for a random ID
+   * @param input            the input applied at the next activity event, used only when overwriteInput is true
+   * @param overwriteInput   true to overwrite the input at the rerun point with input
+   * @return the instance ID of the new workflow instance, and whether the sidecar staged the rerun
+   */
+  public NewOrchestrationInstanceResult rerunWorkflowFromEventWithResult(String sourceInstanceId, int eventId,
+      @Nullable String newInstanceId, @Nullable Object input, boolean overwriteInput) {
+    return new NewOrchestrationInstanceResult(
+        this.rerunWorkflowFromEvent(sourceInstanceId, eventId, newInstanceId, input, overwriteInput), false);
+  }
 
   /**
    * Rejects a cross-app target on a client that does not implement cross-app routing. Implementations that
